@@ -1,334 +1,142 @@
-import { useEffect } from "react";
-import { useFetcher } from "react-router";
+import { useEffect, useState } from "react";
+import { useLoaderData, useFetcher } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import db from "../db.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
-
-  return null;
+  const { session } = await authenticate.admin(request);
+  const settings = await db.bannerSettings.findUnique({
+    where: { shop: session.shop },
+  });
+  return { settings };
 };
 
 export const action = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
-  const color = ["Red", "Orange", "Yellow", "Green"][
-    Math.floor(Math.random() * 4)
-  ];
-  const response = await admin.graphql(
-    `#graphql
-      mutation populateProduct($product: ProductCreateInput!) {
-        productCreate(product: $product) {
-          product {
-            id
-            title
-            handle
-            status
-            variants(first: 10) {
-              edges {
-                node {
-                  id
-                  price
-                  barcode
-                  createdAt
-                }
-              }
-            }
-            demoInfo: metafield(namespace: "$app", key: "demo_info") {
-              jsonValue
-            }
-          }
-        }
-      }`,
-    {
-      variables: {
-        product: {
-          title: `${color} Snowboard`,
-          metafields: [
-            {
-              namespace: "$app",
-              key: "demo_info",
-              value: "Created by React Router Template",
-            },
-          ],
-        },
-      },
-    },
-  );
-  const responseJson = await response.json();
-  const product = responseJson.data.productCreate.product;
-  const variantId = product.variants.edges[0].node.id;
-  const variantResponse = await admin.graphql(
-    `#graphql
-    mutation shopifyReactRouterTemplateUpdateVariant($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-      productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-        productVariants {
-          id
-          price
-          barcode
-          createdAt
-        }
-      }
-    }`,
-    {
-      variables: {
-        productId: product.id,
-        variants: [{ id: variantId, price: "100.00" }],
-      },
-    },
-  );
-  const variantResponseJson = await variantResponse.json();
-  const metaobjectResponse = await admin.graphql(
-    `#graphql
-    mutation shopifyReactRouterTemplateUpsertMetaobject($handle: MetaobjectHandleInput!, $values: JSON!) {
-      metaobjectUpsert(handle: $handle, values: $values) {
-        metaobject {
-          id
-          handle
-          values
-        }
-        userErrors {
-          field
-          message
-        }
-      }
-    }`,
-    {
-      variables: {
-        handle: {
-          type: "$app:example",
-          handle: "demo-entry",
-        },
-        values: {
-          title: "Demo Entry",
-          description:
-            "This metaobject was created by the Shopify app template to demonstrate the metaobject API.",
-        },
-      },
-    },
-  );
-  const metaobjectResponseJson = await metaobjectResponse.json();
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
 
-  return {
-    product: responseJson.data.productCreate.product,
-    variant: variantResponseJson.data.productVariantsBulkUpdate.productVariants,
-    metaobject: metaobjectResponseJson.data.metaobjectUpsert.metaobject,
+  const data = {
+    bannerText: formData.get("bannerText"),
+    bannerTextFr: formData.get("bannerTextFr"),
+    acceptText: formData.get("acceptText"),
+    acceptTextFr: formData.get("acceptTextFr"),
+    rejectText: formData.get("rejectText"),
+    rejectTextFr: formData.get("rejectTextFr"),
+    customizeText: formData.get("customizeText"),
+    customizeTextFr: formData.get("customizeTextFr"),
+    position: formData.get("position"),
+    bgColor: formData.get("bgColor"),
+    textColor: formData.get("textColor"),
+    buttonColor: formData.get("buttonColor"),
   };
+
+  await db.bannerSettings.upsert({
+    where: { shop: session.shop },
+    update: data,
+    create: { shop: session.shop, ...data },
+  });
+
+  return { success: true };
 };
 
 export default function Index() {
+  const { settings } = useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
-  const isLoading =
-    ["loading", "submitting"].includes(fetcher.state) &&
-    fetcher.formMethod === "POST";
+
+  const [form, setForm] = useState({
+    bannerText:
+      settings?.bannerText ||
+      "We use cookies to improve your experience. By using our site, you agree to our use of cookies.",
+    bannerTextFr:
+      settings?.bannerTextFr ||
+      "Nous utilisons des cookies pour améliorer votre expérience. En utilisant notre site, vous acceptez notre utilisation des cookies.",
+    acceptText: settings?.acceptText || "Accept",
+    acceptTextFr: settings?.acceptTextFr || "Accepter",
+    rejectText: settings?.rejectText || "Reject",
+    rejectTextFr: settings?.rejectTextFr || "Refuser",
+    customizeText: settings?.customizeText || "Customize",
+    customizeTextFr: settings?.customizeTextFr || "Personnaliser",
+    position: settings?.position || "bottom",
+    bgColor: settings?.bgColor || "#1a1a1a",
+    textColor: settings?.textColor || "#ffffff",
+    buttonColor: settings?.buttonColor || "#00a86b",
+  });
+
+  const update = (field) => (e) =>
+    setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  const isSaving = fetcher.state === "submitting";
 
   useEffect(() => {
-    if (fetcher.data?.product?.id) {
-      shopify.toast.show("Product created");
+    if (fetcher.data?.success) {
+      shopify.toast.show("Settings saved");
     }
-  }, [fetcher.data?.product?.id, shopify]);
-  const generateProduct = () => fetcher.submit({}, { method: "POST" });
+  }, [fetcher.data, shopify]);
+
+  const handleSave = () => {
+    fetcher.submit(form, { method: "POST" });
+  };
+
+  const fieldStyle = { width: "100%", padding: "8px", marginTop: "4px", marginBottom: "12px", boxSizing: "border-box" };
 
   return (
-    <s-page heading="Shopify app template">
-      <s-button slot="primary-action" onClick={generateProduct}>
-        Generate a product
+    <s-page heading="Cookie Consent Banner Settings">
+      <s-button slot="primary-action" onClick={handleSave} {...(isSaving ? { loading: true } : {})}>
+        Save settings
       </s-button>
 
-      <s-section heading="Congrats on creating a new Shopify app 🎉">
-        <s-paragraph>
-          This embedded app template uses{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/tools/app-bridge"
-            target="_blank"
-          >
-            App Bridge
-          </s-link>{" "}
-          interface examples like an{" "}
-          <s-link href="/app/additional">additional page in the app nav</s-link>
-          , as well as an{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            Admin GraphQL
-          </s-link>{" "}
-          mutation demo, to provide a starting point for app development.
-        </s-paragraph>
-      </s-section>
-      <s-section heading="Get started with products">
-        <s-paragraph>
-          Generate a product with GraphQL and get the JSON output for that
-          product. Learn more about the{" "}
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql/latest/mutations/productCreate"
-            target="_blank"
-          >
-            productCreate
-          </s-link>{" "}
-          mutation in our API references. Includes a product{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data/metafields"
-            target="_blank"
-          >
-            metafield
-          </s-link>{" "}
-          and{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data/metaobjects"
-            target="_blank"
-          >
-            metaobject
-          </s-link>
-          .
-        </s-paragraph>
-        <s-stack direction="inline" gap="base">
-          <s-button
-            onClick={generateProduct}
-            {...(isLoading ? { loading: true } : {})}
-          >
-            Generate a product
-          </s-button>
-          {fetcher.data?.product && (
-            <s-button
-              onClick={() => {
-                shopify.intents.invoke?.("edit:shopify/Product", {
-                  value: fetcher.data?.product?.id,
-                });
-              }}
-              target="_blank"
-              variant="tertiary"
-            >
-              Edit product
-            </s-button>
-          )}
-        </s-stack>
-        {fetcher.data?.product && (
-          <s-section heading="productCreate mutation">
-            <s-stack direction="block" gap="base">
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>{JSON.stringify(fetcher.data.product, null, 2)}</code>
-                </pre>
-              </s-box>
+      <s-section heading="Banner text — English">
+        <div>
+          <label>Banner text</label>
+          <textarea value={form.bannerText} onChange={update("bannerText")} rows={2} style={fieldStyle} />
 
-              <s-heading>productVariantsBulkUpdate mutation</s-heading>
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>{JSON.stringify(fetcher.data.variant, null, 2)}</code>
-                </pre>
-              </s-box>
+          <label>Accept button text</label>
+          <input type="text" value={form.acceptText} onChange={update("acceptText")} style={fieldStyle} />
 
-              <s-heading>metaobjectUpsert mutation</s-heading>
-              <s-box
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-                background="subdued"
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                  }}
-                >
-                  <code>
-                    {JSON.stringify(fetcher.data.metaobject, null, 2)}
-                  </code>
-                </pre>
-              </s-box>
-            </s-stack>
-          </s-section>
-        )}
+          <label>Reject button text</label>
+          <input type="text" value={form.rejectText} onChange={update("rejectText")} style={fieldStyle} />
+
+          <label>Customize button text</label>
+          <input type="text" value={form.customizeText} onChange={update("customizeText")} style={fieldStyle} />
+        </div>
       </s-section>
 
-      <s-section slot="aside" heading="App template specs">
-        <s-paragraph>
-          <s-text>Framework: </s-text>
-          <s-link href="https://reactrouter.com/" target="_blank">
-            React Router
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Interface: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/app-home/using-polaris-components"
-            target="_blank"
-          >
-            Polaris web components
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>API: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/api/admin-graphql"
-            target="_blank"
-          >
-            GraphQL
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Custom data: </s-text>
-          <s-link
-            href="https://shopify.dev/docs/apps/build/custom-data"
-            target="_blank"
-          >
-            Metafields &amp; metaobjects
-          </s-link>
-        </s-paragraph>
-        <s-paragraph>
-          <s-text>Database: </s-text>
-          <s-link href="https://www.prisma.io/" target="_blank">
-            Prisma
-          </s-link>
-        </s-paragraph>
+      <s-section heading="Banner text — Français">
+        <div>
+          <label>Texte de la bannière</label>
+          <textarea value={form.bannerTextFr} onChange={update("bannerTextFr")} rows={2} style={fieldStyle} />
+
+          <label>Texte du bouton Accepter</label>
+          <input type="text" value={form.acceptTextFr} onChange={update("acceptTextFr")} style={fieldStyle} />
+
+          <label>Texte du bouton Refuser</label>
+          <input type="text" value={form.rejectTextFr} onChange={update("rejectTextFr")} style={fieldStyle} />
+
+          <label>Texte du bouton Personnaliser</label>
+          <input type="text" value={form.customizeTextFr} onChange={update("customizeTextFr")} style={fieldStyle} />
+        </div>
       </s-section>
 
-      <s-section slot="aside" heading="Next steps">
-        <s-unordered-list>
-          <s-list-item>
-            Build an{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/getting-started/build-app-example"
-              target="_blank"
-            >
-              example app
-            </s-link>
-          </s-list-item>
-          <s-list-item>
-            Explore Shopify&apos;s API with{" "}
-            <s-link
-              href="https://shopify.dev/docs/apps/tools/graphiql-admin-api"
-              target="_blank"
-            >
-              GraphiQL
-            </s-link>
-          </s-list-item>
-        </s-unordered-list>
+      <s-section heading="Appearance">
+        <div>
+          <label>Banner position</label>
+          <select value={form.position} onChange={update("position")} style={fieldStyle}>
+            <option value="bottom">Bottom</option>
+            <option value="top">Top</option>
+          </select>
+
+          <label>Background color</label>
+          <input type="color" value={form.bgColor} onChange={update("bgColor")} style={{ ...fieldStyle, width: "60px", padding: "2px" }} />
+
+          <label>Text color</label>
+          <input type="color" value={form.textColor} onChange={update("textColor")} style={{ ...fieldStyle, width: "60px", padding: "2px" }} />
+
+          <label>Button color</label>
+          <input type="color" value={form.buttonColor} onChange={update("buttonColor")} style={{ ...fieldStyle, width: "60px", padding: "2px" }} />
+        </div>
       </s-section>
     </s-page>
   );

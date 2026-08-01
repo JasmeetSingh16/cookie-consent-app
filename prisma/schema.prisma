@@ -32,3 +32,25 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+model ConsentEvent {
+  id        String   @id @default(cuid())
+  shop      String
+  choice    String
+  createdAt DateTime @default(now())
+}
+model BannerSettings {
+  shop          String   @id
+  bannerText    String   @default("We use cookies to improve your experience. By using our site, you agree to our use of cookies.")
+  bannerTextFr  String   @default("Nous utilisons des cookies pour améliorer votre expérience. En utilisant notre site, vous acceptez notre utilisation des cookies.")
+  acceptText    String   @default("Accept")
+  acceptTextFr  String   @default("Accepter")
+  rejectText    String   @default("Reject")
+  rejectTextFr  String   @default("Refuser")
+  customizeText String   @default("Customize")
+  customizeTextFr String @default("Personnaliser")
+  position      String   @default("bottom")
+  bgColor       String   @default("#1a1a1a")
+  textColor     String   @default("#ffffff")
+  buttonColor   String   @default("#00a86b")
+  updatedAt     DateTime @updatedAt
+}

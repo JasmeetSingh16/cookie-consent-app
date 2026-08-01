@@ -1,0 +1,168 @@
+<div id="cookie-consent-banner" class="cookie-consent-banner" style="display: none;">
+  <div class="cookie-consent-content">
+    <p class="cookie-consent-text" id="cookie-consent-text"></p>
+    <div class="cookie-consent-buttons">
+      <button id="cookie-consent-reject" class="cookie-consent-btn cookie-consent-btn-secondary"></button>
+      <button id="cookie-consent-customize" class="cookie-consent-btn cookie-consent-btn-secondary"></button>
+      <button id="cookie-consent-accept" class="cookie-consent-btn cookie-consent-btn-primary"></button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .cookie-consent-banner {
+    position: fixed;
+    left: 0;
+    right: 0;
+    padding: 16px 24px;
+    z-index: 9999;
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.15);
+    font-family: inherit;
+  }
+  .cookie-consent-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .cookie-consent-text {
+    margin: 0;
+    flex: 1;
+    min-width: 200px;
+    font-size: 14px;
+  }
+  .cookie-consent-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .cookie-consent-btn {
+    padding: 10px 18px;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+</style>
+
+<script>
+  (function() {
+    var STORAGE_KEY = 'cookie_consent_choice';
+    var shopDomain = window.Shopify ? window.Shopify.shop : null;
+
+    function getConsent() {
+      try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; }
+    }
+
+    function setConsent(choice) {
+      try { localStorage.setItem(STORAGE_KEY, choice); } catch (e) {}
+    }
+
+    function logConsentEvent(choice) {
+      fetch('/apps/cookie-consent/log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ choice: choice, shop: shopDomain, timestamp: new Date().toISOString() })
+      }).catch(function(err) { console.warn('Cookie consent log failed:', err); });
+    }
+
+    function applyShopifyPrivacyConsent(choice) {
+      if (window.Shopify && window.Shopify.customerPrivacy) {
+        var consentObj = {
+          marketing: choice === 'accepted',
+          analytics: choice === 'accepted',
+          preferences: choice === 'accepted',
+          sale_of_data: choice === 'accepted'
+        };
+        window.Shopify.customerPrivacy.setTrackingConsent(consentObj, function() {});
+      }
+    }
+
+    function hideBanner() {
+      var banner = document.getElementById('cookie-consent-banner');
+      if (banner) banner.style.display = 'none';
+    }
+
+    function showBanner() {
+      var banner = document.getElementById('cookie-consent-banner');
+      if (banner) banner.style.display = 'block';
+    }
+
+    function applySettings(settings) {
+      var banner = document.getElementById('cookie-consent-banner');
+      var textEl = document.getElementById('cookie-consent-text');
+      var acceptBtn = document.getElementById('cookie-consent-accept');
+      var rejectBtn = document.getElementById('cookie-consent-reject');
+      var customizeBtn = document.getElementById('cookie-consent-customize');
+
+      textEl.textContent = settings.bannerText;
+      acceptBtn.textContent = settings.acceptText;
+      rejectBtn.textContent = settings.rejectText;
+      customizeBtn.textContent = settings.customizeText;
+
+      banner.style[settings.position === 'top' ? 'top' : 'bottom'] = '0';
+      banner.style.backgroundColor = settings.bgColor;
+      banner.style.color = settings.textColor;
+
+      acceptBtn.style.backgroundColor = settings.buttonColor;
+      acceptBtn.style.border = '1px solid ' + settings.buttonColor;
+      acceptBtn.style.color = '#ffffff';
+
+      rejectBtn.style.border = '1px solid ' + settings.buttonColor;
+      rejectBtn.style.color = settings.textColor;
+      rejectBtn.style.backgroundColor = 'transparent';
+
+      customizeBtn.style.border = '1px solid ' + settings.buttonColor;
+      customizeBtn.style.color = settings.textColor;
+      customizeBtn.style.backgroundColor = 'transparent';
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      if (!shopDomain) return;
+
+      fetch('/apps/cookie-consent/settings?shop=' + encodeURIComponent(shopDomain))
+        .then(function(res) { return res.json(); })
+        .then(function(settings) {
+          applySettings(settings);
+
+          var existingConsent = getConsent();
+          if (!existingConsent) {
+            showBanner();
+          } else {
+            applyShopifyPrivacyConsent(existingConsent);
+          }
+
+          document.getElementById('cookie-consent-accept').addEventListener('click', function() {
+            setConsent('accepted');
+            applyShopifyPrivacyConsent('accepted');
+            logConsentEvent('accepted');
+            hideBanner();
+          });
+
+          document.getElementById('cookie-consent-reject').addEventListener('click', function() {
+            setConsent('rejected');
+            applyShopifyPrivacyConsent('rejected');
+            logConsentEvent('rejected');
+            hideBanner();
+          });
+
+          document.getElementById('cookie-consent-customize').addEventListener('click', function() {
+            alert('Customize options coming soon — for now, use Accept or Reject.');
+          });
+        })
+        .catch(function(err) {
+          console.warn('Failed to load cookie consent settings:', err);
+        });
+    });
+  })();
+</script>
+
+{% schema %}
+{
+  "name": "Cookie Consent Banner",
+  "target": "body"
+}
+{% endschema %}
