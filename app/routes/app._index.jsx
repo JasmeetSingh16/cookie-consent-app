@@ -81,6 +81,7 @@ export default function Index() {
   };
 
   const fieldStyle = { width: "100%", padding: "8px", marginTop: "4px", marginBottom: "12px", boxSizing: "border-box" };
+  const colorFieldStyle = { ...fieldStyle, width: "60px", padding: "2px", display: "block" };
 
   return (
     <s-page heading="Cookie Consent Banner Settings">
@@ -129,13 +130,13 @@ export default function Index() {
           </select>
 
           <label>Background color</label>
-          <input type="color" value={form.bgColor} onChange={update("bgColor")} style={{ ...fieldStyle, width: "60px", padding: "2px" }} />
+          <input type="color" value={form.bgColor} onChange={update("bgColor")} style={colorFieldStyle} />
 
           <label>Text color</label>
-          <input type="color" value={form.textColor} onChange={update("textColor")} style={{ ...fieldStyle, width: "60px", padding: "2px" }} />
+          <input type="color" value={form.textColor} onChange={update("textColor")} style={colorFieldStyle} />
 
           <label>Button color</label>
-          <input type="color" value={form.buttonColor} onChange={update("buttonColor")} style={{ ...fieldStyle, width: "60px", padding: "2px" }} />
+          <input type="color" value={form.buttonColor} onChange={update("buttonColor")} style={colorFieldStyle} />
         </div>
       </s-section>
     </s-page>

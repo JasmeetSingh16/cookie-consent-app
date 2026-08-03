@@ -3,7 +3,6 @@
     <p class="cookie-consent-text" id="cookie-consent-text"></p>
     <div class="cookie-consent-buttons">
       <button id="cookie-consent-reject" class="cookie-consent-btn cookie-consent-btn-secondary"></button>
-      <button id="cookie-consent-customize" class="cookie-consent-btn cookie-consent-btn-secondary"></button>
       <button id="cookie-consent-accept" class="cookie-consent-btn cookie-consent-btn-primary"></button>
     </div>
   </div>
@@ -92,16 +91,17 @@
     }
 
     function applySettings(settings) {
+      var browserLang = (navigator.language || navigator.userLanguage || 'en').slice(0, 2);
+      var langSettings = settings[browserLang] || settings.en;
+
       var banner = document.getElementById('cookie-consent-banner');
       var textEl = document.getElementById('cookie-consent-text');
       var acceptBtn = document.getElementById('cookie-consent-accept');
       var rejectBtn = document.getElementById('cookie-consent-reject');
-      var customizeBtn = document.getElementById('cookie-consent-customize');
 
-      textEl.textContent = settings.bannerText;
-      acceptBtn.textContent = settings.acceptText;
-      rejectBtn.textContent = settings.rejectText;
-      customizeBtn.textContent = settings.customizeText;
+      textEl.textContent = langSettings.bannerText;
+      acceptBtn.textContent = langSettings.acceptText;
+      rejectBtn.textContent = langSettings.rejectText;
 
       banner.style[settings.position === 'top' ? 'top' : 'bottom'] = '0';
       banner.style.backgroundColor = settings.bgColor;
@@ -114,10 +114,6 @@
       rejectBtn.style.border = '1px solid ' + settings.buttonColor;
       rejectBtn.style.color = settings.textColor;
       rejectBtn.style.backgroundColor = 'transparent';
-
-      customizeBtn.style.border = '1px solid ' + settings.buttonColor;
-      customizeBtn.style.color = settings.textColor;
-      customizeBtn.style.backgroundColor = 'transparent';
     }
 
     document.addEventListener('DOMContentLoaded', function() {
@@ -147,10 +143,6 @@
             applyShopifyPrivacyConsent('rejected');
             logConsentEvent('rejected');
             hideBanner();
-          });
-
-          document.getElementById('cookie-consent-customize').addEventListener('click', function() {
-            alert('Customize options coming soon — for now, use Accept or Reject.');
           });
         })
         .catch(function(err) {
